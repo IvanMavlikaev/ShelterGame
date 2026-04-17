@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 from Population import Population
+from Person import Person
 import config
+import random
 
 
 def marriage():
@@ -21,9 +23,41 @@ def marriage():
         answer = input()
 
 
+def check_age_parents(pers1, pers2):
+    if pers1.gender == 'female' and pers1.age > 40:
+        return 0
+    elif pers2.gender == 'female' and pers2.age > 40:
+        return 0
+    if pers1.gender == 'male' and pers1.age > 50:
+        return 0
+    elif pers2.gender == 'male' and pers2.age > 50:
+        return 0
+    elif pers1.gender == 'female' and pers1.age > 30:
+        return 0.2
+    elif pers2.gender == 'female' and pers2.age > 30:
+        return 0.2
+    elif pers1.gender == 'female' and pers1.age < 30:
+        return 0.3
+    elif pers2.gender == 'female' and pers2.age < 30:
+        return 0.3
+    return 0
+
+
 def birth(population):
     for i, j in config.marriage_list:
-        print(i, j)
+        pers1 = population.people_dict[i]
+        pers2 = population.people_dict[j]
+        prob = check_age_parents(pers1, pers2)
+        print(prob)
+        fertiliry = random.choices([True, False], weights=[prob, 1 - prob])[0]
+        if fertiliry:
+            if pers1.gender == 'male':
+                child = Person("birth", pers2, pers1)
+                population.add_person(child)
+            else:
+                child = Person("birth", pers1, pers2)
+                population.add_person(child)
+
 
 def year_step(population):
     marriage()
@@ -82,6 +116,5 @@ def generate_data(population):
 if __name__ == "__main__":
     population = Population(10)
     generate_data(population)
-    population.print_population()
     year_step(population)
 

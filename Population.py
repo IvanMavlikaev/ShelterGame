@@ -8,8 +8,10 @@ class Population:
         for i in range(count):
             self.people_dict[config.biggest_id] = Person('start', None, None)
 
+    def add_person(self, person):
+        self.people_dict[person.id] = person
+
     def print_population(self):
-        print(self.people_dict.keys())
         for pers in self.people_dict.values():
             if pers.died == 0:
                 pers.print_person()
