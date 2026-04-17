@@ -1,9 +1,5 @@
-import random
 import matplotlib.pyplot as plt
-import numpy as np
-from Person import Person
 from Population import Population
-import config
 
 
 def year_step(year, population):
