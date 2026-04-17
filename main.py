@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 from Population import Population
+import config
 
 
-def year_step(year, population):
-    print(f"Год {year}")
+def marriage():
+    print(f"Год {config.year}")
     print('Есть ли в этом году новобрачные? Yes | No')
     answer = input()
     while answer == 'Yes':
@@ -15,35 +16,25 @@ def year_step(year, population):
         pers_2.marriage = 1
         pers_1.partner = person_2_id
         pers_2.partner = person_1_id
+        config.marriage_list.append((person_1_id, person_2_id))
         print('Ещё есть? Yes | No')
         answer = input()
 
-    # marriage_list = []
-    # for pers in population.people_dict.values():
-    #     if pers.marriage == 1 and pers not in marriage_list:
-    #         marriage_list.append(pers)
-    #         marriage_list.append(pers.partner)
-    #         if pers.gender == 'female':
-    #             if pers.age < 40:
-    #                 child = random.choices([0.8, 0.2], weights=[0, 1])[0]
-    #                 if child == 1:
-    #                     new_person = Person("new_person", pers, pers.partner)
-    #                     population.people_list.append(new_person)
-    #         else:
-    #             if pers.partner.age < 40:
-    #                 child = random.choices([0.8, 0.2], weights=[0, 1])[0]
-    #                 if child == 1:
-    #                     new_person = Person("new_person", pers.partner, pers)
-    #                     population.people_list.append(new_person)
-    # marriage_list = []
+
+def birth(population):
+    for i, j in config.marriage_list:
+        print(i, j)
+
+def year_step(population):
+    marriage()
+    birth(population)
     population.print_population()
-    year += 1
+    config.year += 1
     for pers in population.people_dict.values():
         pers.person_die()
         if pers.died == 0:
            pers.age += 1
-
-    year_step(year, population)
+    year_step(population)
 
 
 
@@ -92,6 +83,5 @@ if __name__ == "__main__":
     population = Population(10)
     generate_data(population)
     population.print_population()
-    year = 0
-    year_step(year, population)
+    year_step(population)
 
