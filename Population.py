@@ -2,6 +2,7 @@ from Person import Person
 import config
 
 
+
 class Population:
     def __init__(self, count):
         self.people_dict = dict()
