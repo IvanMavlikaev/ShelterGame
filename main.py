@@ -4,6 +4,7 @@ from Person import Person
 import config
 import random
 
+current_fig = None
 
 def marriage():
     print(f"Год {config.year}")
@@ -59,62 +60,67 @@ def birth(population):
                 population.add_person(child)
 
 
-def year_step(population):
-    marriage()
-    birth(population)
-    population.print_population()
-    config.year += 1
-    for pers in population.people_dict.values():
-        pers.person_die()
-        if pers.died == 0:
-           pers.age += 1
-    year_step(population)
 
+def update_diagram(data):
+    """Обновление диаграммы"""
+    global current_fig
 
+    if current_fig is None:
+        plt.ion()  # Включаем интерактивный режим
+        current_fig = plt.figure(figsize=(6, 6))
 
-def generate_diagram(data):
-    plt.figure(figsize=(12, 6))
-    plt.subplot(1, 2, 1)
-    bars = plt.bar(range(len(data)), data, color='skyblue', edgecolor='black')
-    plt.title('Столбчатая диаграмма (20 элементов)')
-    plt.xlabel('Индекс элемента (×5)')
-    plt.ylabel('Значение')
-    plt.grid(axis='y', alpha=0.75)
+    plt.clf()
 
-    # Устанавливаем подписи на оси X в 5 раз больше
     indices = range(len(data))
-    plt.xticks(indices, [f'{i * 5 + 5}' for i in indices])
 
-    # Добавляем значения на столбцы
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width() / 2., height + 0.5,
-                 f'{int(height)}', ha='center', va='bottom', fontsize=9)
-
-    # Горизонтальная диаграмма
-    plt.subplot(1, 2, 2)
     plt.barh(range(len(data)), data, color='lightgreen', edgecolor='black')
-    plt.title('Горизонтальная столбчатая диаграмма')
-    plt.ylabel('Индекс элемента (×5)')
+    plt.title('Возрастная пирамида поселенцев')
+    plt.ylabel('Возраст')
     plt.xlabel('Значение')
     plt.grid(axis='x', alpha=0.75)
 
-    # Устанавливаем подписи на оси Y в 5 раз больше
-    plt.yticks(indices, [f'{i * 5 + 5}' for i in indices])
+    plt.yticks(indices, [f'{i * 5}-{4 + 5 * i}' for i in indices])
 
     plt.tight_layout()
-    plt.show()
+    current_fig.canvas.draw()
+    current_fig.canvas.flush_events()
+    plt.pause(0.01)
+
 
 def generate_data(population):
+    """Сбор данных и обновление диаграммы"""
     data = [0] * 20
     for pers in population.people_dict.values():
         if not pers.died:
-            data[pers.age // 5] += 1
-    #generate_diagram(data)
+            data[pers.age//5] += 1
+    update_diagram(data)
+
+
+def year_step(population):
+    """Основной цикл программы"""
+    try:
+        while True:
+
+            marriage()
+            birth(population)
+            population.print_population()
+            config.year += 1
+
+            for pers in list(population.people_dict.values()):
+                pers.person_die()
+                if pers.died == 0:
+                    pers.age += 1
+
+            generate_data(population)
+
+            print(f"\nГод {config.year} завершён\n")
+
+    except KeyboardInterrupt:
+        print("\nПрограмма остановлена пользователем")
+        if current_fig:
+            plt.close(current_fig)
 
 
 if __name__ == "__main__":
     population = Population(10)
-    generate_data(population)
     year_step(population)
-
