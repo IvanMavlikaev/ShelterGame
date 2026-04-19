@@ -13,10 +13,20 @@ def marriage(population):
     while answer == 'Yes':
         print('id супругов через пробел')
         person_1_id, person_2_id = map(int, input().split())
+        if person_1_id == person_2_id:
+            print('Идентификаторы разных людей должны различаться')
+            print('Ещё новобрачные есть? Yes | No')
+            answer = input()
+            continue
+        if population.people_dict[person_1_id].gender == population.people_dict[person_2_id].gender:
+            print('Пол супругов должен различаться')
+            print('Ещё новобрачные есть? Yes | No')
+            answer = input()
+            continue
         relative = find_ancestor(population, person_1_id, person_2_id)
         if relative != -1:
             print("Вы не можете поженить родственников")
-            print('Ещё есть? Yes | No')
+            print('Ещё новобрачные есть? Yes | No')
             answer = input()
             continue
         pers_1 = population.people_dict[person_1_id]
@@ -64,7 +74,6 @@ def birth(population):
             else:
                 child = Person("birth", pers1, pers2)
                 population.add_person(child)
-
 
 
 def update_diagram(data):
