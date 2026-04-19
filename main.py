@@ -1,43 +1,13 @@
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
 from Population import Population, find_ancestor
 from Person import Person
 import config
 import random
-
-current_fig = None
-
-def marriage(population):
-    print(f"Год {config.year}")
-    print('Есть ли в этом году новобрачные? Yes | No')
-    answer = input()
-    while answer == 'Yes':
-        print('id супругов через пробел')
-        person_1_id, person_2_id = map(int, input().split())
-        if person_1_id == person_2_id:
-            print('Идентификаторы разных людей должны различаться')
-            print('Ещё новобрачные есть? Yes | No')
-            answer = input()
-            continue
-        if population.people_dict[person_1_id].gender == population.people_dict[person_2_id].gender:
-            print('Пол супругов должен различаться')
-            print('Ещё новобрачные есть? Yes | No')
-            answer = input()
-            continue
-        relative = find_ancestor(population, person_1_id, person_2_id)
-        if relative != -1:
-            print("Вы не можете поженить родственников")
-            print('Ещё новобрачные есть? Yes | No')
-            answer = input()
-            continue
-        pers_1 = population.people_dict[person_1_id]
-        pers_1.marriage = 1
-        pers_2 = population.people_dict[person_2_id]
-        pers_2.marriage = 1
-        pers_1.partner = person_2_id
-        pers_2.partner = person_1_id
-        config.marriage_list.append((person_1_id, person_2_id))
-        print('Ещё есть? Yes | No')
-        answer = input()
+from matplotlib.gridspec import GridSpec
+import sys
 
 
 def check_age_parents(pers1, pers2):
@@ -59,83 +29,469 @@ def check_age_parents(pers1, pers2):
         return 0.3
     return 0
 
+class PopulationSimulator:
+    def __init__(self):
+        self.population = None
+        self.fig = None
+        self.current_unit_id = None
+        self.marriage_mode = False
+        self.selected_spouse1 = None
+        self.selected_spouse2 = None
+        self.marriage_fig = None
+        self.marriage_candidates = []
+        self.current_candidate_index = 0
+        self.current_candidate_id = None
+        self.step = 1
 
-def birth(population):
-    for i, j in config.marriage_list:
-        pers1 = population.people_dict[i]
-        pers2 = population.people_dict[j]
-        prob = check_age_parents(pers1, pers2)
-        print(prob)
-        fertiliry = random.choices([True, False], weights=[prob, 1 - prob])[0]
-        if fertiliry:
-            if pers1.gender == 'male':
-                child = Person("birth", pers2, pers1)
-                population.add_person(child)
+    def show_unit_profile(self, unit_id, ax=None):
+        """Отображение анкеты юнита на указанной оси"""
+        if ax is None:
+            ax = self.profile_ax
+
+        ax.clear()
+        person = self.population.people_dict[unit_id]
+
+        profile_text = f"""
+    ==========================================
+         АНКЕТА ЮНИТА ID: {person.id}
+    ==========================================
+
+    Основная информация:
+      Имя: {person.name} {person.surname}
+      Пол: {person.gender}
+      Возраст: {person.age} лет
+      Статус: {"ЖИВ" if not person.died else "УМЕР"}
+
+    Характеристики:
+      Цвет кожи: {person.skin_color}
+      Цвет волос: {person.hair_color}
+      Агрессивность: {person.aggressive_layer}/1
+      Интеллект: {person.intelligence_layer}/5
+      Сила: {person.power_layer}/5
+      Алкоголизм: {person.alcoholism_layer}/1
+
+    Семейное положение:
+      В браке: {"Да" if person.marriage else "Нет"}
+      Партнер: {person.partner if person.partner else "Нет"}
+
+    Родители:
+      Мать: {person.mother.id if person.mother else "Неизвестно"}
+      Отец: {person.father.id if person.father else "Неизвестно"}
+
+    ==========================================
+        """
+
+        ax.text(0.05, 0.95, profile_text, transform=ax.transAxes,
+                fontsize=9, verticalalignment='top', fontfamily='monospace')
+        ax.set_title(f'ПРОФИЛЬ ЮНИТА #{person.id}', fontsize=12, fontweight='bold')
+        ax.axis('off')
+
+        if self.fig:
+            self.fig.canvas.draw()
+            self.fig.canvas.flush_events()
+
+    def update_diagram(self):
+        """Обновление возрастной пирамиды"""
+        if not hasattr(self, 'diagram_ax'):
+            return
+
+        self.diagram_ax.clear()
+
+        # Собираем данные
+        data = [0] * 20
+        for pers in self.population.people_dict.values():
+            if not pers.died:
+                age_group = pers.age // 5
+                if age_group < 20:
+                    data[age_group] += 1
+
+        # Создаем гистограмму
+        y_pos = range(len(data))
+        bars = self.diagram_ax.barh(y_pos, data)
+
+        # Окрашиваем возрастные группы
+        for i, bar in enumerate(bars):
+            if i < 4:  # 0-19 лет
+                bar.set_color('#90EE90')
+            elif i < 12:  # 20-59 лет
+                bar.set_color('#32CD32')
+            else:  # 60+ лет
+                bar.set_color('#228B22')
+
+        self.diagram_ax.set_title(f'Возрастная пирамида (Год {config.year})', fontsize=12, fontweight='bold')
+        self.diagram_ax.set_xlabel('Количество человек')
+        self.diagram_ax.set_ylabel('Возрастная группа')
+        self.diagram_ax.set_yticks(y_pos)
+        self.diagram_ax.set_yticklabels([f'{i * 5}-{i * 5 + 4}' for i in y_pos])
+        self.diagram_ax.grid(axis='x', alpha=0.3, linestyle='--')
+
+        # Статистика
+        alive_count = sum(1 for p in self.population.people_dict.values() if not p.died)
+        stats = f'Всего жителей: {alive_count}'
+        self.diagram_ax.text(0.5, -0.05, stats, transform=self.diagram_ax.transAxes,
+                             ha='center', fontsize=10, bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.7))
+
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
+
+    def update_marriage_dialog(self):
+        """Обновление диалогового окна брака"""
+        if not self.marriage_fig:
+            return
+
+        # Обновляем информационное поле
+        info_ax = self.marriage_fig.axes[2]
+        info_ax.clear()
+        info_ax.axis('off')
+
+        if self.step == 1:
+            info_text = 'ВЫБОР ПЕРВОГО СУПРУГА\n\nВыберите человека для брака\nИспользуйте кнопки навигации'
+        else:
+            info_text = f'ВЫБОР ВТОРОГО СУПРУГА\n\nВыбран: ID {self.selected_spouse1}\n\nТеперь выберите партнера'
+
+        info_ax.text(0.5, 0.5, info_text, ha='center', va='center', fontsize=12, fontweight='bold')
+
+        # Показываем текущего кандидата
+        if self.current_candidate_id:
+            self.show_unit_profile(self.current_candidate_id, self.marriage_profile_ax)
+
+        self.marriage_fig.canvas.draw()
+
+    def create_marriage_dialog(self, event):
+        """Создание диалога для выбора супругов"""
+        print("\n" + "=" * 50)
+        print("РЕГИСТРАЦИЯ БРАКА")
+        print("=" * 50)
+
+        # Создаем новое окно
+        self.marriage_fig = plt.figure('Выбор супруга/супруги', figsize=(14, 8))
+
+        gs = GridSpec(4, 2, figure=self.marriage_fig, height_ratios=[4, 1, 1, 1])
+
+        # Область для анкеты
+        self.marriage_profile_ax = self.marriage_fig.add_subplot(gs[0, 1])
+
+        # Область для информационного текста
+        info_ax = self.marriage_fig.add_subplot(gs[0, 0])
+        info_ax.axis('off')
+
+        # Кнопки навигации
+        btn_prev_ax = self.marriage_fig.add_subplot(gs[2, 0])
+        btn_next_ax = self.marriage_fig.add_subplot(gs[2, 1])
+        btn_ok_ax = self.marriage_fig.add_subplot(gs[3, 0])
+        btn_cancel_ax = self.marriage_fig.add_subplot(gs[3, 1])
+
+        self.btn_prev_marriage = Button(btn_prev_ax, 'ПРЕДЫДУЩИЙ', color='lightyellow', hovercolor='orange')
+        self.btn_next_marriage = Button(btn_next_ax, 'СЛЕДУЮЩИЙ', color='lightyellow', hovercolor='orange')
+        self.btn_ok_marriage = Button(btn_ok_ax, 'ВЫБРАТЬ', color='lightgreen', hovercolor='green')
+        self.btn_cancel_marriage = Button(btn_cancel_ax, 'ОТМЕНА', color='salmon', hovercolor='red')
+
+        # Привязываем обработчики (сохраняем ссылки чтобы не удалились)
+        self.btn_prev_marriage.on_clicked(self.prev_candidate)
+        self.btn_next_marriage.on_clicked(self.next_candidate)
+        self.btn_ok_marriage.on_clicked(self.select_candidate)
+        self.btn_cancel_marriage.on_clicked(self.cancel_marriage)
+
+        # Начинаем с первого шага
+        self.step = 1
+        self.selected_spouse1 = None
+        self.selected_spouse2 = None
+
+        # Получаем кандидатов для первого выбора
+        self.update_candidates_list()
+
+        if not self.marriage_candidates:
+            print("Нет доступных кандидатов для брака")
+            plt.close(self.marriage_fig)
+            self.marriage_fig = None
+            return
+
+        self.current_candidate_index = 0
+        self.current_candidate_id = self.marriage_candidates[0]
+
+        # Обновляем отображение
+        self.update_marriage_dialog()
+
+        plt.tight_layout()
+        plt.show()
+
+    def update_candidates_list(self):
+        """Обновление списка кандидатов в зависимости от шага"""
+        if self.step == 1:
+            # Первый шаг: все живые и не состоящие в браке
+            self.marriage_candidates = [uid for uid, p in self.population.people_dict.items()
+                                        if not p.died and p.marriage == 0]
+        else:
+            # Второй шаг: живые, не в браке, противоположного пола, не родственники
+            spouse1 = self.population.people_dict[self.selected_spouse1]
+            self.marriage_candidates = [uid for uid, p in self.population.people_dict.items()
+                                        if not p.died and p.marriage == 0
+                                        and p.gender != spouse1.gender
+                                        and uid != self.selected_spouse1
+                                        and find_ancestor(self.population, self.selected_spouse1, uid) == -1]
+
+    def prev_candidate(self, event):
+        """Предыдущий кандидат"""
+        if not self.marriage_candidates:
+            return
+
+        self.current_candidate_index = (self.current_candidate_index - 1) % len(self.marriage_candidates)
+        self.current_candidate_id = self.marriage_candidates[self.current_candidate_index]
+        self.show_unit_profile(self.current_candidate_id, self.marriage_profile_ax)
+        self.marriage_fig.canvas.draw()
+        print(f"Переключено на кандидата ID: {self.current_candidate_id}")
+
+    def next_candidate(self, event):
+        """Следующий кандидат"""
+        if not self.marriage_candidates:
+            return
+
+        self.current_candidate_index = (self.current_candidate_index + 1) % len(self.marriage_candidates)
+        self.current_candidate_id = self.marriage_candidates[self.current_candidate_index]
+        self.show_unit_profile(self.current_candidate_id, self.marriage_profile_ax)
+        self.marriage_fig.canvas.draw()
+        print(f"Переключено на кандидата ID: {self.current_candidate_id}")
+
+    def select_candidate(self, event):
+        """Выбор кандидата"""
+        if self.step == 1:
+            # Выбираем первого супруга
+            self.selected_spouse1 = self.current_candidate_id
+            print(f"Выбран первый супруг: ID {self.selected_spouse1}")
+
+            # Переходим ко второму шагу
+            self.step = 2
+
+            # Обновляем список кандидатов для второго выбора
+            self.update_candidates_list()
+
+            if not self.marriage_candidates:
+                print("Нет подходящих кандидатов для второго супруга!")
+                self.cancel_marriage(None)
+                return
+
+            # Сбрасываем индекс для нового списка
+            self.current_candidate_index = 0
+            self.current_candidate_id = self.marriage_candidates[0]
+
+            # Обновляем отображение
+            self.update_marriage_dialog()
+
+        elif self.step == 2:
+            # Выбираем второго супруга
+            self.selected_spouse2 = self.current_candidate_id
+            print(f"Выбран второй супруг: ID {self.selected_spouse2}")
+
+            # Регистрируем брак
+            self.register_marriage(self.selected_spouse1, self.selected_spouse2)
+
+            # Закрываем окно выбора
+            plt.close(self.marriage_fig)
+            self.marriage_fig = None
+
+            # Возвращаемся к главному окну
+            self.update_diagram()
+            if self.current_unit_id in [self.selected_spouse1, self.selected_spouse2]:
+                self.show_unit_profile(self.current_unit_id)
+
+            # Сбрасываем состояние
+            self.step = 1
+            self.selected_spouse1 = None
+            self.selected_spouse2 = None
+
+    def cancel_marriage(self, event):
+        """Отмена регистрации брака"""
+        print("Регистрация брака отменена")
+        if self.marriage_fig:
+            plt.close(self.marriage_fig)
+            self.marriage_fig = None
+        self.step = 1
+        self.selected_spouse1 = None
+        self.selected_spouse2 = None
+
+    def register_marriage(self, person_1_id, person_2_id):
+        """Регистрация брака"""
+        pers1 = self.population.people_dict[person_1_id]
+        pers2 = self.population.people_dict[person_2_id]
+
+        # Регистрируем брак
+        pers1.marriage = 1
+        pers2.marriage = 1
+        pers1.partner = person_2_id
+        pers2.partner = person_1_id
+        config.marriage_list.append((person_1_id, person_2_id))
+
+        print(f"Брак между {person_1_id} и {person_2_id} успешно зарегистрирован!")
+
+    def next_unit(self, event):
+        """Переключение на следующего юнита"""
+        alive_units = [uid for uid, p in self.population.people_dict.items() if not p.died]
+        if alive_units:
+            if self.current_unit_id not in alive_units:
+                self.current_unit_id = alive_units[0]
             else:
-                child = Person("birth", pers1, pers2)
-                population.add_person(child)
+                current_index = alive_units.index(self.current_unit_id)
+                current_index = (current_index + 1) % len(alive_units)
+                self.current_unit_id = alive_units[current_index]
+            self.show_unit_profile(self.current_unit_id)
+            print(f"Показан юнит ID: {self.current_unit_id}")
 
+    def prev_unit(self, event):
+        """Переключение на предыдущего юнита"""
+        alive_units = [uid for uid, p in self.population.people_dict.items() if not p.died]
+        if alive_units:
+            if self.current_unit_id not in alive_units:
+                self.current_unit_id = alive_units[0]
+            else:
+                current_index = alive_units.index(self.current_unit_id)
+                current_index = (current_index - 1) % len(alive_units)
+                self.current_unit_id = alive_units[current_index]
+            self.show_unit_profile(self.current_unit_id)
+            print(f"Показан юнит ID: {self.current_unit_id}")
 
-def update_diagram(data):
-    """Обновление диаграммы"""
-    global current_fig
+    def next_year(self, event):
+        """Переход к следующему году"""
+        print(f"\n{'=' * 50}")
+        print(f"ГОД {config.year + 1}")
+        print(f"{'=' * 50}")
 
-    if current_fig is None:
-        plt.ion()  # Включаем интерактивный режим
-        current_fig = plt.figure(figsize=(6, 6))
+        # Рождение детей от браков
+        new_births = []
+        for i, j in config.marriage_list:
+            pers1 = self.population.people_dict[i]
+            pers2 = self.population.people_dict[j]
 
-    plt.clf()
+            if not pers1.died and not pers2.died:
+                # Простая вероятность рождения (30%)
+                prob = check_age_parents(pers1, pers2)
+                fertiliry = random.choices([True, False], weights=[prob, 1 - prob])[0]
+                if fertiliry:
+                    if pers1.gender == 'male':
+                        child = Person("birth", pers2, pers1)
+                        self.population.add_person(child)
+                    else:
+                        child = Person("birth", pers1, pers2)
+                        self.population.add_person(child)
+                    new_births.append(child)
+                    print(f"Родился: {child.name} {child.surname} (ID: {child.id})")
 
-    indices = range(len(data))
+        for child in new_births:
+            self.population.add_person(child)
 
-    plt.barh(range(len(data)), data, color='lightgreen', edgecolor='black')
-    plt.title('Возрастная пирамида поселенцев')
-    plt.ylabel('Возраст')
-    plt.xlabel('Значение')
-    plt.grid(axis='x', alpha=0.75)
-
-    plt.yticks(indices, [f'{i * 5}-{4 + 5 * i}' for i in indices])
-
-    plt.tight_layout()
-    current_fig.canvas.draw()
-    current_fig.canvas.flush_events()
-    plt.pause(0.01)
-
-
-def generate_data(population):
-    """Сбор данных и обновление диаграммы"""
-    data = [0] * 20
-    for pers in population.people_dict.values():
-        if not pers.died:
-            data[pers.age//5] += 1
-    update_diagram(data)
-
-
-def year_step(population):
-    """Основной цикл программы"""
-    try:
-        while True:
-
-            marriage(population)
-            birth(population)
-            population.print_population()
-            config.year += 1
-
-            for pers in list(population.people_dict.values()):
+        # Старение и смерть
+        deaths = []
+        for pers in list(self.population.people_dict.values()):
+            if not pers.died:
+                old_age = pers.age
                 pers.person_die()
-                if pers.died == 0:
+                if pers.died:
+                    deaths.append(pers)
+                else:
                     pers.age += 1
 
-            generate_data(population)
+        if deaths:
+            print(f"\nУмерли:")
+            for pers in deaths:
+                print(f"   {pers.name} {pers.surname} (ID: {pers.id}) в возрасте {pers.age} лет")
 
-            print(f"\nГод {config.year} завершён\n")
+        config.year += 1
 
-    except KeyboardInterrupt:
-        print("\nПрограмма остановлена пользователем")
-        if current_fig:
-            plt.close(current_fig)
+        alive_count = sum(1 for p in self.population.people_dict.values() if not p.died)
+        print(f"\nИТОГИ {config.year} ГОДА:")
+        print(f"   Всего жителей: {alive_count}")
+        print(f"   Родилось: {len(new_births)}")
+        print(f"   Умерло: {len(deaths)}")
+        print(f"{'=' * 50}\n")
+
+        # Обновление отображения
+        self.update_diagram()
+
+        # Обновляем анкету если текущий юнит умер
+        if self.current_unit_id and self.population.people_dict[self.current_unit_id].died:
+            alive_units = [uid for uid, p in self.population.people_dict.items() if not p.died]
+            if alive_units:
+                self.current_unit_id = alive_units[0]
+                self.show_unit_profile(self.current_unit_id)
+
+    def quit_program(self, event):
+        """Выход из программы"""
+        print("\nПрограмма завершена")
+        plt.close('all')
+        sys.exit(0)
+
+    def setup_gui(self):
+        """Настройка графического интерфейса"""
+        print("Настройка GUI...")
+
+        self.fig = plt.figure('Population Simulator', figsize=(14, 8))
+
+        gs = GridSpec(5, 2, figure=self.fig, height_ratios=[4, 1, 1, 1, 1])
+
+        # Область для диаграммы
+        self.diagram_ax = self.fig.add_subplot(gs[0, 0])
+
+        # Область для анкеты
+        self.profile_ax = self.fig.add_subplot(gs[0, 1])
+
+        # Кнопки управления
+        btn_next_year_ax = self.fig.add_subplot(gs[1, :])
+        btn_marriage_ax = self.fig.add_subplot(gs[2, :])
+        btn_prev_ax = self.fig.add_subplot(gs[3, 0])
+        btn_next_ax = self.fig.add_subplot(gs[3, 1])
+        btn_quit_ax = self.fig.add_subplot(gs[4, :])
+
+        # Создаем кнопки
+        self.btn_next_year = Button(btn_next_year_ax, 'СЛЕДУЮЩИЙ ГОД',
+                                    color='lightgreen', hovercolor='green')
+        self.btn_marriage = Button(btn_marriage_ax, 'СОЗДАТЬ БРАК',
+                                   color='lightblue', hovercolor='blue')
+        self.btn_prev = Button(btn_prev_ax, 'ПРЕДЫДУЩИЙ ЮНИТ',
+                               color='lightyellow', hovercolor='orange')
+        self.btn_next = Button(btn_next_ax, 'СЛЕДУЮЩИЙ ЮНИТ',
+                               color='lightyellow', hovercolor='orange')
+        self.btn_quit = Button(btn_quit_ax, 'ВЫХОД',
+                               color='salmon', hovercolor='red')
+
+        # Привязываем обработчики
+        self.btn_next_year.on_clicked(self.next_year)
+        self.btn_marriage.on_clicked(self.create_marriage_dialog)
+        self.btn_prev.on_clicked(self.prev_unit)
+        self.btn_next.on_clicked(self.next_unit)
+        self.btn_quit.on_clicked(self.quit_program)
+
+        # Инициализация
+        self.update_diagram()
+
+        # Выбираем первого живого юнита
+        alive_units = [uid for uid, p in self.population.people_dict.items() if not p.died]
+        if alive_units:
+            self.current_unit_id = alive_units[0]
+            self.show_unit_profile(self.current_unit_id)
+
+        plt.tight_layout()
+        print("GUI настроен")
+
+    def run(self):
+        """Запуск симуляции"""
+        print("\n" + "=" * 60)
+        print("POPULATION SIMULATOR")
+        print("=" * 60)
+        print("\nУправление:")
+        print("   НАЖИМАЙТЕ НА КНОПКИ МЫШЬЮ:")
+        print("     • СЛЕДУЮЩИЙ ГОД - продвижение симуляции")
+        print("     • СОЗДАТЬ БРАК - открыть окно выбора супругов")
+        print("     • ПРЕДЫДУЩИЙ/СЛЕДУЮЩИЙ ЮНИТ - навигация по анкетам")
+        print("     • ВЫХОД - закрытие программы")
+        print("=" * 60 + "\n")
+
+        # Создаем начальное население
+        self.population = Population(10)
+        self.setup_gui()
+
+        # Запускаем GUI
+        plt.show(block=True)
 
 
 if __name__ == "__main__":
-    population = Population(10)
-    year_step(population)
+    simulator = PopulationSimulator()
+    simulator.run()
