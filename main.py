@@ -52,35 +52,42 @@ class PopulationSimulator:
         ax.clear()
         person = self.population.people_dict[unit_id]
 
+        # Добавляем информацию о желании брака
+        desire_text = ""
+        if person.robustness_marriage == 1:
+            desire_text = "\n  ЖЕЛАНИЕ: Хочет вступить в брак"
+        elif person.robustness_marriage == 2:
+            desire_text = f"\n  ЖЕЛАНИЕ: Взаимное желание с ID {person.desired_partner}"
+
         profile_text = f"""
-    ==========================================
-         АНКЕТА ЮНИТА ID: {person.id}
-    ==========================================
+       ==========================================
+            АНКЕТА ЮНИТА ID: {person.id}
+       ==========================================
 
-    Основная информация:
-      Имя: {person.name} {person.surname}
-      Пол: {person.gender}
-      Возраст: {person.age} лет
-      Статус: {"ЖИВ" if not person.died else "УМЕР"}
+       Основная информация:
+         Имя: {person.name} {person.surname}
+         Пол: {person.gender}
+         Возраст: {person.age} лет
+         Статус: {"ЖИВ" if not person.died else "УМЕР"}
 
-    Характеристики:
-      Цвет кожи: {person.skin_color}
-      Цвет волос: {person.hair_color}
-      Агрессивность: {person.aggressive_layer}/1
-      Интеллект: {person.intelligence_layer}/5
-      Сила: {person.power_layer}/5
-      Алкоголизм: {person.alcoholism_layer}/1
+       Характеристики:
+         Цвет кожи: {person.skin_color}
+         Цвет волос: {person.hair_color}
+         Агрессивность: {person.aggressive_layer}/1
+         Интеллект: {person.intelligence_layer}/5
+         Сила: {person.power_layer}/5
+         Алкоголизм: {person.alcoholism_layer}/1
 
-    Семейное положение:
-      В браке: {"Да" if person.marriage else "Нет"}
-      Партнер: {person.partner if person.partner else "Нет"}
+       Семейное положение:
+         В браке: {"Да" if person.marriage else "Нет"}
+         Партнер: {person.partner if person.partner else "Нет"}{desire_text}
 
-    Родители:
-      Мать: {person.mother.id if person.mother else "Неизвестно"}
-      Отец: {person.father.id if person.father else "Неизвестно"}
+       Родители:
+         Мать: {person.mother.id if person.mother else "Неизвестно"}
+         Отец: {person.father.id if person.father else "Неизвестно"}
 
-    ==========================================
-        """
+       ==========================================
+           """
 
         ax.text(0.05, 0.95, profile_text, transform=ax.transAxes,
                 fontsize=9, verticalalignment='top', fontfamily='monospace')
@@ -135,6 +142,130 @@ class PopulationSimulator:
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
 
+    def population_desires(self, event):
+        """Расчет желаний населения вступить в брак"""
+        print("\n" + "=" * 60)
+        print("АНАЛИЗ ЖЕЛАНИЙ НАСЕЛЕНИЯ")
+        print("=" * 60)
+
+        # Сбрасываем желания у всех
+        for pers in self.population.people_dict.values():
+            if not pers.died and pers.marriage == 0:
+                pers.robustness_marriage = 0
+                pers.desired_partner = None
+
+        # Собираем желающих
+        candidates = []
+        for uid, pers in self.population.people_dict.items():
+            if not pers.died and pers.marriage == 0:
+                # Определяем вероятность в зависимости от возраста
+                if pers.age < 30:
+                    probability = 0.2
+                elif pers.age <= 40:
+                    probability = 0.1
+                else:
+                    probability = 0
+
+                # Проверяем желание
+                if random.random() < probability:
+                    pers.robustness_marriage = 1
+                    candidates.append(uid)
+                    print(f"  ID {pers.id}: {pers.name} {pers.surname} ({pers.age} лет, {pers.gender}) - ХОЧЕТ В БРАК")
+
+        print(f"\nВсего желающих: {len(candidates)}")
+
+        # Ищем взаимные желания
+        mutual_desires = []
+        for i in range(len(candidates)):
+            for j in range(i + 1, len(candidates)):
+                uid1 = candidates[i]
+                uid2 = candidates[j]
+                pers1 = self.population.people_dict[uid1]
+                pers2 = self.population.people_dict[uid2]
+
+                # Проверяем возможность брака
+                if (pers1.gender != pers2.gender and
+                        find_ancestor(self.population, uid1, uid2) == -1):
+                    # Взаимное желание (оба хотят в брак)
+                    pers1.robustness_marriage = 2
+                    pers2.robustness_marriage = 2
+                    pers1.desired_partner = uid2
+                    pers2.desired_partner = uid1
+                    mutual_desires.append((uid1, uid2))
+
+                    print(f"\n  ВЗАИМНОЕ ЖЕЛАНИЕ!")
+                    print(
+                        f"    {pers1.name} {pers1.surname} (ID: {uid1}) <-> {pers2.name} {pers2.surname} (ID: {uid2})")
+
+        # Заключаем взаимные браки
+        if mutual_desires:
+            print(f"\n{'=' * 50}")
+            print("ЗАКЛЮЧЕНЫ ВЗАИМНЫЕ БРАКИ:")
+            for uid1, uid2 in mutual_desires:
+                self.register_marriage(uid1, uid2, is_automatic=True)
+
+        # Показываем итоговую статистику
+        print(f"\n{'=' * 50}")
+        print("ИТОГИ АНАЛИЗА:")
+        print(f"  • Всего желающих: {len(candidates)}")
+        print(f"  • Взаимных желаний: {len(mutual_desires)}")
+        print(f"  • Заключено браков: {len(mutual_desires)}")
+        print("=" * 60 + "\n")
+
+        # Обновляем отображение
+        self.update_diagram()
+
+        # Показываем окно с детальной информацией
+        self.show_desires_dialog(candidates, mutual_desires)
+
+    def show_desires_dialog(self, candidates, mutual_desires):
+        """Показ диалогового окна с желаниями населения"""
+        if not candidates and not mutual_desires:
+            # Если нет желающих, просто выводим сообщение
+            fig = plt.figure('Желания населения', figsize=(8, 4))
+            ax = fig.add_subplot(111)
+            ax.axis('off')
+            ax.text(0.5, 0.5, 'В этом году никто не изъявил желание вступить в брак',
+                    ha='center', va='center', fontsize=14, fontweight='bold')
+            plt.show(block=False)
+            plt.pause(3)
+            plt.close(fig)
+            return
+
+        # Создаем окно с информацией
+        desires_fig = plt.figure('Желания населения', figsize=(12, 8))
+
+        # Создаем текст
+        info_text = "ЖЕЛАНИЯ НАСЕЛЕНИЯ В ЭТОМ ГОДУ\n\n"
+        info_text += "=" * 50 + "\n\n"
+
+        info_text += "ЖЕЛАЮЩИЕ ВСТУПИТЬ В БРАК:\n"
+        for uid in candidates:
+            pers = self.population.people_dict[uid]
+            if pers.robustness_marriage == 1:
+                info_text += f"  • ID {pers.id}: {pers.name} {pers.surname} ({pers.age} лет, {pers.gender})\n"
+            elif pers.robustness_marriage == 2:
+                info_text += f"  • ID {pers.id}: {pers.name} {pers.surname} ({pers.age} лет, {pers.gender}) - ВЗАИМНО С ID {pers.desired_partner}\n"
+
+        if mutual_desires:
+            info_text += "\n" + "=" * 50 + "\n"
+            info_text += "ЗАКЛЮЧЕННЫЕ БРАКИ (по взаимному желанию):\n"
+            for uid1, uid2 in mutual_desires:
+                pers1 = self.population.people_dict[uid1]
+                pers2 = self.population.people_dict[uid2]
+                info_text += f"  • {pers1.name} {pers1.surname} (ID: {uid1}) + {pers2.name} {pers2.surname} (ID: {uid2})\n"
+
+        ax = desires_fig.add_subplot(111)
+        ax.axis('off')
+        ax.text(0.05, 0.95, info_text, transform=ax.transAxes,
+                fontsize=10, verticalalignment='top', fontfamily='monospace')
+
+        plt.tight_layout()
+        plt.show(block=False)
+        # Автоматически закроем через 5 секунд
+        plt.pause(5)
+        plt.close(desires_fig)
+
     def update_marriage_dialog(self):
         """Обновление диалогового окна брака"""
         if not self.marriage_fig:
@@ -161,7 +292,7 @@ class PopulationSimulator:
     def create_marriage_dialog(self, event):
         """Создание диалога для выбора супругов"""
         print("\n" + "=" * 50)
-        print("РЕГИСТРАЦИЯ БРАКА")
+        print("РЕГИСТРАЦИЯ БРАКА (РУЧНОЙ РЕЖИМ)")
         print("=" * 50)
 
         # Создаем новое окно
@@ -187,7 +318,7 @@ class PopulationSimulator:
         self.btn_ok_marriage = Button(btn_ok_ax, 'ВЫБРАТЬ', color='lightgreen', hovercolor='green')
         self.btn_cancel_marriage = Button(btn_cancel_ax, 'ОТМЕНА', color='salmon', hovercolor='red')
 
-        # Привязываем обработчики (сохраняем ссылки чтобы не удалились)
+        # Привязываем обработчики
         self.btn_prev_marriage.on_clicked(self.prev_candidate)
         self.btn_next_marriage.on_clicked(self.next_candidate)
         self.btn_ok_marriage.on_clicked(self.select_candidate)
@@ -240,7 +371,6 @@ class PopulationSimulator:
         self.current_candidate_id = self.marriage_candidates[self.current_candidate_index]
         self.show_unit_profile(self.current_candidate_id, self.marriage_profile_ax)
         self.marriage_fig.canvas.draw()
-        print(f"Переключено на кандидата ID: {self.current_candidate_id}")
 
     def next_candidate(self, event):
         """Следующий кандидат"""
@@ -251,7 +381,6 @@ class PopulationSimulator:
         self.current_candidate_id = self.marriage_candidates[self.current_candidate_index]
         self.show_unit_profile(self.current_candidate_id, self.marriage_profile_ax)
         self.marriage_fig.canvas.draw()
-        print(f"Переключено на кандидата ID: {self.current_candidate_id}")
 
     def select_candidate(self, event):
         """Выбор кандидата"""
@@ -284,7 +413,7 @@ class PopulationSimulator:
             print(f"Выбран второй супруг: ID {self.selected_spouse2}")
 
             # Регистрируем брак
-            self.register_marriage(self.selected_spouse1, self.selected_spouse2)
+            self.register_marriage(self.selected_spouse1, self.selected_spouse2, is_automatic=False)
 
             # Закрываем окно выбора
             plt.close(self.marriage_fig)
@@ -310,7 +439,7 @@ class PopulationSimulator:
         self.selected_spouse1 = None
         self.selected_spouse2 = None
 
-    def register_marriage(self, person_1_id, person_2_id):
+    def register_marriage(self, person_1_id, person_2_id, is_automatic=False):
         """Регистрация брака"""
         pers1 = self.population.people_dict[person_1_id]
         pers2 = self.population.people_dict[person_2_id]
@@ -322,7 +451,17 @@ class PopulationSimulator:
         pers2.partner = person_1_id
         config.marriage_list.append((person_1_id, person_2_id))
 
-        print(f"Брак между {person_1_id} и {person_2_id} успешно зарегистрирован!")
+        # Устанавливаем robustness_marriage
+        if is_automatic:
+            # Взаимное желание - уровень 2
+            pers1.robustness_marriage = 2
+            pers2.robustness_marriage = 2
+            print(f"✅ Автоматический брак между {person_1_id} и {person_2_id} (взаимное желание, уровень 2)")
+        else:
+            # Ручной брак - уровень 1
+            pers1.robustness_marriage = 1
+            pers2.robustness_marriage = 1
+            print(f"✅ Ручной брак между {person_1_id} и {person_2_id} (уровень 1)")
 
     def next_unit(self, event):
         """Переключение на следующего юнита"""
@@ -335,7 +474,6 @@ class PopulationSimulator:
                 current_index = (current_index + 1) % len(alive_units)
                 self.current_unit_id = alive_units[current_index]
             self.show_unit_profile(self.current_unit_id)
-            print(f"Показан юнит ID: {self.current_unit_id}")
 
     def prev_unit(self, event):
         """Переключение на предыдущего юнита"""
@@ -348,7 +486,6 @@ class PopulationSimulator:
                 current_index = (current_index - 1) % len(alive_units)
                 self.current_unit_id = alive_units[current_index]
             self.show_unit_profile(self.current_unit_id)
-            print(f"Показан юнит ID: {self.current_unit_id}")
 
     def next_year(self, event):
         """Переход к следующему году"""
@@ -423,38 +560,40 @@ class PopulationSimulator:
     def setup_gui(self):
         """Настройка графического интерфейса"""
         print("Настройка GUI...")
-
         self.fig = plt.figure('Population Simulator', figsize=(14, 8))
 
-        gs = GridSpec(5, 2, figure=self.fig, height_ratios=[4, 1, 1, 1, 1])
+        gs = GridSpec(6, 2, figure=self.fig, height_ratios=[4, 1, 1, 1, 1, 1])
 
         # Область для диаграммы
         self.diagram_ax = self.fig.add_subplot(gs[0, 0])
-
-        # Область для анкеты
+            # Область для анкеты
         self.profile_ax = self.fig.add_subplot(gs[0, 1])
 
         # Кнопки управления
         btn_next_year_ax = self.fig.add_subplot(gs[1, :])
-        btn_marriage_ax = self.fig.add_subplot(gs[2, :])
-        btn_prev_ax = self.fig.add_subplot(gs[3, 0])
-        btn_next_ax = self.fig.add_subplot(gs[3, 1])
-        btn_quit_ax = self.fig.add_subplot(gs[4, :])
+        btn_desires_ax = self.fig.add_subplot(gs[2, :])
+        btn_marriage_ax = self.fig.add_subplot(gs[3, :])
+        btn_prev_ax = self.fig.add_subplot(gs[4, 0])
+        btn_next_ax = self.fig.add_subplot(gs[4, 1])
+        btn_quit_ax = self.fig.add_subplot(gs[5, :])
 
         # Создаем кнопки
         self.btn_next_year = Button(btn_next_year_ax, 'СЛЕДУЮЩИЙ ГОД',
-                                    color='lightgreen', hovercolor='green')
-        self.btn_marriage = Button(btn_marriage_ax, 'СОЗДАТЬ БРАК',
-                                   color='lightblue', hovercolor='blue')
+                                        color='lightgreen', hovercolor='green')
+        self.btn_desires = Button(btn_desires_ax, 'ЖЕЛАНИЯ НАСЕЛЕНИЯ',
+                                      color='lightblue', hovercolor='blue')
+        self.btn_marriage = Button(btn_marriage_ax, 'СОЗДАТЬ БРАК (РУЧНОЙ)',
+                                       color='lightyellow', hovercolor='orange')
         self.btn_prev = Button(btn_prev_ax, 'ПРЕДЫДУЩИЙ ЮНИТ',
-                               color='lightyellow', hovercolor='orange')
+                                   color='lightyellow', hovercolor='orange')
         self.btn_next = Button(btn_next_ax, 'СЛЕДУЮЩИЙ ЮНИТ',
-                               color='lightyellow', hovercolor='orange')
+                                   color='lightyellow', hovercolor='orange')
         self.btn_quit = Button(btn_quit_ax, 'ВЫХОД',
-                               color='salmon', hovercolor='red')
+                                   color='salmon', hovercolor='red')
 
         # Привязываем обработчики
         self.btn_next_year.on_clicked(self.next_year)
+        self.btn_desires.on_clicked(self.population_desires)
         self.btn_marriage.on_clicked(self.create_marriage_dialog)
         self.btn_prev.on_clicked(self.prev_unit)
         self.btn_next.on_clicked(self.next_unit)
@@ -480,18 +619,17 @@ class PopulationSimulator:
         print("\nУправление:")
         print("   НАЖИМАЙТЕ НА КНОПКИ МЫШЬЮ:")
         print("     • СЛЕДУЮЩИЙ ГОД - продвижение симуляции")
-        print("     • СОЗДАТЬ БРАК - открыть окно выбора супругов")
+        print("     • ЖЕЛАНИЯ НАСЕЛЕНИЯ - анализ желаний и автоматические браки")
+        print("     • СОЗДАТЬ БРАК (РУЧНОЙ) - ручной выбор супругов")
         print("     • ПРЕДЫДУЩИЙ/СЛЕДУЮЩИЙ ЮНИТ - навигация по анкетам")
         print("     • ВЫХОД - закрытие программы")
+        print("\nПримечание: Автоматические браки (уровень 2) имеют больший шанс рождения детей")
         print("=" * 60 + "\n")
-
         # Создаем начальное население
         self.population = Population(10)
         self.setup_gui()
-
         # Запускаем GUI
         plt.show(block=True)
-
 
 if __name__ == "__main__":
     simulator = PopulationSimulator()

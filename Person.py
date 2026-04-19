@@ -18,6 +18,8 @@ class Person:
         self.alcoholism_layer: int = 0
         self.age: int = 18
         self.marriage = 0
+        self.robustness_marriage = -1
+        self.desired_partner = None
         self.partner = ""
         self.died = 0
         self.mother = mother
