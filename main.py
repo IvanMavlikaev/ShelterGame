@@ -1,18 +1,24 @@
 import matplotlib.pyplot as plt
-from Population import Population
+from Population import Population, find_ancestor
 from Person import Person
 import config
 import random
 
 current_fig = None
 
-def marriage():
+def marriage(population):
     print(f"Год {config.year}")
     print('Есть ли в этом году новобрачные? Yes | No')
     answer = input()
     while answer == 'Yes':
         print('id супругов через пробел')
         person_1_id, person_2_id = map(int, input().split())
+        relative = find_ancestor(population, person_1_id, person_2_id)
+        if relative != -1:
+            print("Вы не можете поженить родственников")
+            print('Ещё есть? Yes | No')
+            answer = input()
+            continue
         pers_1 = population.people_dict[person_1_id]
         pers_1.marriage = 1
         pers_2 = population.people_dict[person_2_id]
@@ -101,7 +107,7 @@ def year_step(population):
     try:
         while True:
 
-            marriage()
+            marriage(population)
             birth(population)
             population.print_population()
             config.year += 1

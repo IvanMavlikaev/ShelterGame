@@ -20,10 +20,13 @@ class Person:
         self.marriage = 0
         self.partner = ""
         self.died = 0
+        self.mother = mother
+        self.father = father
+        self.ancestor_dict = {}
         if flag_generate == "start":
             self.generate_start_characteristics()
         else:
-            self.generate_child(mother, father)
+            self.generate_child()
 
     def generate_start_characteristics(self) -> None:
         self.gender = random.choice(['male', 'female'])
@@ -43,36 +46,37 @@ class Person:
         self.alcoholism_layer = random.choices([0, 1], weights=[0.9, 0.1])[0]
         self.age = random.randint(18, 40)
 
-    def generate_child(self, mother: 'Person', father: 'Person') -> None:
+    def generate_child(self) -> None:
         self.gender = random.choice(['male', 'female'])
         if self.gender == 'male':
             self.name = random.choice(config.names_male)
         else:
             self.name = random.choice(config.names_female)
-        self.surname = father.surname
+        self.surname = self.father.surname
 
-        if mother.skin_color == father.skin_color:
-            self.skin_color = mother.skin_color
-        elif mother.skin_color == "white" and father.skin_color == "black" or mother.skin_color == "black" and father.skin_color == "white":
+        if self.mother.skin_color == self.father.skin_color:
+            self.skin_color = self.mother.skin_color
+        elif self.mother.skin_color == "white" and self.father.skin_color == "black" or self.mother.skin_color == "black" and self.father.skin_color == "white":
             self.skin_color = "mulatto"
-        elif mother.skin_color == "black" and father.skin_color == "yellow" or mother.skin_color == "yellow" and father.skin_color == "black":
+        elif self.mother.skin_color == "black" and self.father.skin_color == "yellow" or self.mother.skin_color == "yellow" and self.father.skin_color == "black":
             self.skin_color = "black"
-        elif mother.skin_color == "white" and father.skin_color == "yellow" or mother.skin_color == "yellow" and father.skin_color == "white":
+        elif self.mother.skin_color == "white" and self.father.skin_color == "yellow" or self.mother.skin_color == "yellow" and self.father.skin_color == "white":
             self.skin_color = "yellow"
         else:
-            self.skin_color = random.choice([mother.skin_color, father.skin_color])
+            self.skin_color = random.choice([self.mother.skin_color, self.father.skin_color])
 
         if self.skin_color == "white":
-            self.hair_color = random.choice([mother.hair_color, father.hair_color])
+            self.hair_color = random.choice([self.mother.hair_color, self.father.hair_color])
         else:
             self.hair_color = "black"
-        self.aggressive_layer = random.choice([mother.aggressive_layer, father.aggressive_layer])
+        self.aggressive_layer = random.choice([self.mother.aggressive_layer, self.father.aggressive_layer])
         self.intelligence_layer = random.choices([1, 2, 3, 4, 5], weights=[0.05, 0.1, 0.6, 0.25, 0.1])[0]
         self.power_layer = random.choices([1, 2, 3, 4, 5], weights=[0.1, 0.2, 0.4, 0.2, 0.1])[0]
-        self.alcoholism_layer = random.choice([mother.alcoholism_layer, father.alcoholism_layer])
+        self.alcoholism_layer = random.choice([self.mother.alcoholism_layer, self.father.alcoholism_layer])
         self.age = 0
         self.marriage = 0
         self.partner = ""
+
 
     def person_die(self):
         if self.age > 80:
