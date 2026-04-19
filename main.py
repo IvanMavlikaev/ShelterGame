@@ -29,6 +29,7 @@ def check_age_parents(pers1, pers2):
         return 0.3
     return 0
 
+
 class PopulationSimulator:
     def __init__(self):
         self.population = None
