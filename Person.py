@@ -25,6 +25,7 @@ class Person:
         self.mother = mother
         self.father = father
         self.ancestor_dict = {}
+        self.profession = None
         if flag_generate == "start":
             self.generate_start_characteristics()
         else:

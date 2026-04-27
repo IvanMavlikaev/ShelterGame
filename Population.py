@@ -5,6 +5,19 @@ import config
 class Population:
     def __init__(self, count):
         self.people_dict = dict()
+        self.professions = {
+            "Leader": -1,
+            "Main doctor": -1,
+            "Main guard": -1,
+            "Chef": -1,
+            "First manager": -1,
+            "Manager": [],
+            "Doctor": [],
+            "Guard": [],
+            "Head teacher": -1,
+            "Teacher": [],
+            "Librarian": -1,
+        }
         for i in range(count):
             self.people_dict[config.biggest_id] = Person('start', None, None)
 
