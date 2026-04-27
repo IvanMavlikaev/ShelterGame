@@ -1,4 +1,5 @@
 import matplotlib
+
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
@@ -43,6 +44,10 @@ class PopulationSimulator:
         self.current_candidate_index = 0
         self.current_candidate_id = None
         self.step = 1
+        self.profession_selection_fig = None
+        self.vacant_professions = []
+        self.current_profession_index = 0
+        self.profession_candidates = []
 
     def show_unit_profile(self, unit_id, ax=None):
         """Отображение анкеты юнита на указанной оси"""
@@ -58,6 +63,9 @@ class PopulationSimulator:
             desire_text = "\n  ЖЕЛАНИЕ: Хочет вступить в брак"
         elif person.robustness_marriage == 2:
             desire_text = f"\n  ЖЕЛАНИЕ: Взаимное желание с ID {person.desired_partner}"
+
+        # Добавляем информацию о профессии
+        profession_text = f"\n  Профессия: {person.profession if person.profession else 'Нет'}"
 
         profile_text = f"""
        ==========================================
@@ -81,6 +89,8 @@ class PopulationSimulator:
        Семейное положение:
          В браке: {"Да" if person.marriage else "Нет"}
          Партнер: {person.partner if person.partner else "Нет"}{desire_text}
+
+       Работа:{profession_text}
 
        Родители:
          Мать: {person.mother.id if person.mother else "Неизвестно"}
@@ -133,14 +143,166 @@ class PopulationSimulator:
         self.diagram_ax.set_yticklabels([f'{i * 5}-{i * 5 + 4}' for i in y_pos])
         self.diagram_ax.grid(axis='x', alpha=0.3, linestyle='--')
 
-        # Статистика
+        # Статистика по профессиям
+        professions_stats = "\nВажные должности:"
+        for prof in self.population.important_professions:
+            if self.population.professions[prof] != -1:
+                person = self.population.people_dict[self.population.professions[prof]]
+                professions_stats += f"\n  {prof}: {person.name} {person.surname}"
+            else:
+                professions_stats += f"\n  {prof}: ВАКАНСИЯ!"
+
         alive_count = sum(1 for p in self.population.people_dict.values() if not p.died)
-        stats = f'Всего жителей: {alive_count}'
-        self.diagram_ax.text(0.5, -0.05, stats, transform=self.diagram_ax.transAxes,
-                             ha='center', fontsize=10, bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.7))
+        stats = f'Всего жителей: {alive_count}{professions_stats}'
+        self.diagram_ax.text(0.5, -0.25, stats, transform=self.diagram_ax.transAxes,
+                             ha='center', fontsize=9, bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.7))
 
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
+
+    def check_important_professions(self):
+        """Проверка наличия людей на важных должностях"""
+        vacant = []
+        for profession in self.population.important_professions:
+            if self.population.professions[profession] == -1:
+                vacant.append(profession)
+            else:
+                # Проверяем, жив ли человек на должности
+                person_id = self.population.professions[profession]
+                if person_id in self.population.people_dict:
+                    if self.population.people_dict[person_id].died:
+                        self.population.remove_from_profession(person_id)
+                        vacant.append(profession)
+        return vacant
+
+    def show_profession_selection_dialog(self, vacant_professions):
+        """Показ диалога для выбора людей на вакантные должности"""
+        if not vacant_professions:
+            return
+
+        print("\n" + "=" * 60)
+        print("⚠️ ВНИМАНИЕ: ОБНАРУЖЕНЫ ВАКАНСИИ НА ВАЖНЫХ ДОЛЖНОСТЯХ!")
+        print("=" * 60)
+        for prof in vacant_professions:
+            print(f"  • {prof}")
+        print("=" * 60)
+
+        self.vacant_professions = vacant_professions
+        self.current_profession_index = 0
+        self.show_profession_selection_for_current()
+
+    def show_profession_selection_for_current(self):
+        """Показ окна выбора для текущей вакантной должности"""
+        if self.current_profession_index >= len(self.vacant_professions):
+            # Все должности заполнены
+            if self.profession_selection_fig:
+                plt.close(self.profession_selection_fig)
+            self.update_diagram()
+            return
+
+        current_profession = self.vacant_professions[self.current_profession_index]
+
+        # Получаем кандидатов (живые, совершеннолетние)
+        self.profession_candidates = [uid for uid, p in self.population.people_dict.items()
+                                      if not p.died and p.age >= 18]
+
+        if not self.profession_candidates:
+            print(f"Нет доступных кандидатов для должности {current_profession}")
+            self.current_profession_index += 1
+            self.show_profession_selection_for_current()
+            return
+
+        self.current_candidate_index = 0
+        self.current_candidate_id = self.profession_candidates[0]
+
+        # Создаем окно выбора
+        if self.profession_selection_fig:
+            plt.close(self.profession_selection_fig)
+
+        self.profession_selection_fig = plt.figure(f'Назначение на должность: {current_profession}', figsize=(14, 8))
+
+        gs = GridSpec(4, 2, figure=self.profession_selection_fig, height_ratios=[4, 1, 1, 1])
+
+        # Область для анкеты
+        self.profession_profile_ax = self.profession_selection_fig.add_subplot(gs[0, 1])
+
+        # Область для информационного текста
+        info_ax = self.profession_selection_fig.add_subplot(gs[0, 0])
+        info_ax.axis('off')
+        info_ax.text(0.5, 0.5, f'ВЫБОР КАНДИДАТА\n\nДолжность: {current_profession}\n\nВыберите подходящего человека',
+                     ha='center', va='center', fontsize=12, fontweight='bold')
+
+        # Кнопки навигации
+        btn_prev_ax = self.profession_selection_fig.add_subplot(gs[2, 0])
+        btn_next_ax = self.profession_selection_fig.add_subplot(gs[2, 1])
+        btn_ok_ax = self.profession_selection_fig.add_subplot(gs[3, 0])
+        btn_skip_ax = self.profession_selection_fig.add_subplot(gs[3, 1])
+
+        self.btn_prev_prof = Button(btn_prev_ax, 'ПРЕДЫДУЩИЙ', color='lightyellow', hovercolor='orange')
+        self.btn_next_prof = Button(btn_next_ax, 'СЛЕДУЮЩИЙ', color='lightyellow', hovercolor='orange')
+        self.btn_ok_prof = Button(btn_ok_ax, 'НАЗНАЧИТЬ', color='lightgreen', hovercolor='green')
+        self.btn_skip_prof = Button(btn_skip_ax, 'ПРОПУСТИТЬ', color='salmon', hovercolor='red')
+
+        # Привязываем обработчики
+        self.btn_prev_prof.on_clicked(self.prev_profession_candidate)
+        self.btn_next_prof.on_clicked(self.next_profession_candidate)
+        self.btn_ok_prof.on_clicked(self.select_profession_candidate)
+        self.btn_skip_prof.on_clicked(self.skip_profession)
+
+        # Показываем первого кандидата
+        self.show_unit_profile(self.current_candidate_id, self.profession_profile_ax)
+
+        plt.tight_layout()
+        plt.show()
+
+    def prev_profession_candidate(self, event):
+        """Предыдущий кандидат на должность"""
+        if not self.profession_candidates:
+            return
+
+        self.current_candidate_index = (self.current_candidate_index - 1) % len(self.profession_candidates)
+        self.current_candidate_id = self.profession_candidates[self.current_candidate_index]
+        self.show_unit_profile(self.current_candidate_id, self.profession_profile_ax)
+
+    def next_profession_candidate(self, event):
+        """Следующий кандидат на должность"""
+        if not self.profession_candidates:
+            return
+
+        self.current_candidate_index = (self.current_candidate_index + 1) % len(self.profession_candidates)
+        self.current_candidate_id = self.profession_candidates[self.current_candidate_index]
+        self.show_unit_profile(self.current_candidate_id, self.profession_profile_ax)
+
+    def select_profession_candidate(self, event):
+        """Назначение кандидата на должность"""
+        current_profession = self.vacant_professions[self.current_profession_index]
+
+        # Назначаем на должность
+        if self.population.assign_profession(self.current_candidate_id, current_profession):
+            print(
+                f"✅ {self.population.people_dict[self.current_candidate_id].name} назначен на должность {current_profession}")
+
+            # Переходим к следующей вакансии
+            self.current_profession_index += 1
+
+            # Закрываем текущее окно
+            if self.profession_selection_fig:
+                plt.close(self.profession_selection_fig)
+
+            # Показываем следующую вакансию
+            self.show_profession_selection_for_current()
+
+    def skip_profession(self, event):
+        """Пропуск текущей вакансии"""
+        print(f"⚠️ Должность {self.vacant_professions[self.current_profession_index]} осталась вакантной")
+        self.current_profession_index += 1
+
+        # Закрываем текущее окно
+        if self.profession_selection_fig:
+            plt.close(self.profession_selection_fig)
+
+        # Показываем следующую вакансию
+        self.show_profession_selection_for_current()
 
     def population_desires(self, event):
         """Расчет желаний населения вступить в брак"""
@@ -500,16 +662,19 @@ class PopulationSimulator:
             pers2 = self.population.people_dict[j]
 
             if not pers1.died and not pers2.died:
-                # Простая вероятность рождения (30%)
                 prob = check_age_parents(pers1, pers2)
-                fertiliry = random.choices([True, False], weights=[prob, 1 - prob])[0]
-                if fertiliry:
+                # Учитываем robustness_marriage при рождении
+                if pers1.robustness_marriage == 2:
+                    prob = min(prob * 1.5, 0.8)  # Взаимное желание - выше шанс
+                elif pers1.robustness_marriage == 1:
+                    prob = min(prob * 1.2, 0.7)  # Ручной брак
+
+                fertile = random.choices([True, False], weights=[prob, 1 - prob])[0]
+                if fertile:
                     if pers1.gender == 'male':
                         child = Person("birth", pers2, pers1)
-                        self.population.add_person(child)
                     else:
                         child = Person("birth", pers1, pers2)
-                        self.population.add_person(child)
                     new_births.append(child)
                     print(f"Родился: {child.name} {child.surname} (ID: {child.id})")
 
@@ -523,6 +688,8 @@ class PopulationSimulator:
                 old_age = pers.age
                 pers.person_die()
                 if pers.died:
+                    # Снимаем с должности при смерти
+                    self.population.remove_from_profession(pers.id)
                     deaths.append(pers)
                 else:
                     pers.age += 1
@@ -551,6 +718,11 @@ class PopulationSimulator:
                 self.current_unit_id = alive_units[0]
                 self.show_unit_profile(self.current_unit_id)
 
+        # Проверяем важные профессии
+        vacant = self.check_important_professions()
+        if vacant:
+            self.show_profession_selection_dialog(vacant)
+
     def quit_program(self, event):
         """Выход из программы"""
         print("\nПрограмма завершена")
@@ -566,7 +738,7 @@ class PopulationSimulator:
 
         # Область для диаграммы
         self.diagram_ax = self.fig.add_subplot(gs[0, 0])
-            # Область для анкеты
+        # Область для анкеты
         self.profile_ax = self.fig.add_subplot(gs[0, 1])
 
         # Кнопки управления
@@ -579,17 +751,17 @@ class PopulationSimulator:
 
         # Создаем кнопки
         self.btn_next_year = Button(btn_next_year_ax, 'СЛЕДУЮЩИЙ ГОД',
-                                        color='lightgreen', hovercolor='green')
+                                    color='lightgreen', hovercolor='green')
         self.btn_desires = Button(btn_desires_ax, 'ЖЕЛАНИЯ НАСЕЛЕНИЯ',
-                                      color='lightblue', hovercolor='blue')
+                                  color='lightblue', hovercolor='blue')
         self.btn_marriage = Button(btn_marriage_ax, 'СОЗДАТЬ БРАК (РУЧНОЙ)',
-                                       color='lightyellow', hovercolor='orange')
+                                   color='lightyellow', hovercolor='orange')
         self.btn_prev = Button(btn_prev_ax, 'ПРЕДЫДУЩИЙ ЮНИТ',
-                                   color='lightyellow', hovercolor='orange')
+                               color='lightyellow', hovercolor='orange')
         self.btn_next = Button(btn_next_ax, 'СЛЕДУЮЩИЙ ЮНИТ',
-                                   color='lightyellow', hovercolor='orange')
+                               color='lightyellow', hovercolor='orange')
         self.btn_quit = Button(btn_quit_ax, 'ВЫХОД',
-                                   color='salmon', hovercolor='red')
+                               color='salmon', hovercolor='red')
 
         # Привязываем обработчики
         self.btn_next_year.on_clicked(self.next_year)
@@ -624,12 +796,16 @@ class PopulationSimulator:
         print("     • ПРЕДЫДУЩИЙ/СЛЕДУЮЩИЙ ЮНИТ - навигация по анкетам")
         print("     • ВЫХОД - закрытие программы")
         print("\nПримечание: Автоматические браки (уровень 2) имеют больший шанс рождения детей")
+        print("\nСистема профессий: Важные должности проверяются каждый год")
         print("=" * 60 + "\n")
+
         # Создаем начальное население
         self.population = Population(10)
         self.setup_gui()
+
         # Запускаем GUI
         plt.show(block=True)
+
 
 if __name__ == "__main__":
     simulator = PopulationSimulator()

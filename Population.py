@@ -18,6 +18,7 @@ class Population:
             "Teacher": [],
             "Librarian": -1,
         }
+        self.important_professions = ["Leader", "Main doctor", "Main guard", "Chef", "First manager"]
         for i in range(count):
             self.people_dict[config.biggest_id] = Person('start', None, None)
 
@@ -28,6 +29,55 @@ class Population:
         for pers in self.people_dict.values():
             if pers.died == 0:
                 pers.print_person()
+
+    def assign_profession(self, person_id, profession):
+        """Назначение профессии человеку"""
+        if person_id not in self.people_dict:
+            print(f"Ошибка: Человек с ID {person_id} не найден")
+            return False
+
+        person = self.people_dict[person_id]
+        if person.died:
+            print(f"Ошибка: {person.name} {person.surname} (ID: {person_id}) умер")
+            return False
+
+        # Проверяем, подходит ли профессия для одиночной должности
+        if profession in ["Leader", "Main doctor", "Main guard", "Chef", "First manager", "Head teacher", "Librarian"]:
+            if self.professions[profession] != -1:
+                old_person = self.professions[profession]
+                print(f"Предупреждение: Должность {profession} уже занята ID {old_person}")
+                return False
+            self.professions[profession] = person_id
+        else:
+            # Для коллективных должностей
+            if person_id not in self.professions[profession]:
+                self.professions[profession].append(person_id)
+
+        person.profession = profession
+        print(f"✅ {person.name} {person.surname} (ID: {person_id}) назначен на должность {profession}")
+        return True
+
+    def remove_from_profession(self, person_id):
+        """Снятие человека с должности при смерти"""
+        if person_id not in self.people_dict:
+            return
+
+        person = self.people_dict[person_id]
+        if person.profession:
+            profession = person.profession
+
+            if profession in ["Leader", "Main doctor", "Main guard", "Chef", "First manager", "Head teacher",
+                              "Librarian"]:
+                if self.professions[profession] == person_id:
+                    self.professions[profession] = -1
+                    print(f"⚠️ {person.name} {person.surname} (ID: {person_id}) снят с должности {profession} (умер)")
+            else:
+                if person_id in self.professions[profession]:
+                    self.professions[profession].remove(person_id)
+                    print(f"⚠️ {person.name} {person.surname} (ID: {person_id}) снят с должности {profession} (умер)")
+
+            person.profession = None
+
 
 def add_ancestor(person_id, population, generation, mother_id, father_id):
     person = population.people_dict[person_id]
@@ -76,4 +126,6 @@ def find_ancestor(population, person1, person2):
             else:
                 return -2
     return -1
+
+
 
