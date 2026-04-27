@@ -197,6 +197,7 @@ class PopulationSimulator:
             # Все должности заполнены
             if self.profession_selection_fig:
                 plt.close(self.profession_selection_fig)
+                self.profession_selection_fig = None
             self.update_diagram()
             return
 
@@ -229,8 +230,10 @@ class PopulationSimulator:
         # Область для информационного текста
         info_ax = self.profession_selection_fig.add_subplot(gs[0, 0])
         info_ax.axis('off')
-        info_ax.text(0.5, 0.5, f'ВЫБОР КАНДИДАТА\n\nДолжность: {current_profession}\n\nВыберите подходящего человека',
-                     ha='center', va='center', fontsize=12, fontweight='bold')
+
+        # Показываем информацию о должности и текущем кандидате
+        info_text = f'ВЫБОР КАНДИДАТА\n\nДолжность: {current_profession}\n\nВсего кандидатов: {len(self.profession_candidates)}\nТекущий: {self.current_candidate_index + 1} из {len(self.profession_candidates)}\n\nВыберите подходящего человека'
+        info_ax.text(0.5, 0.5, info_text, ha='center', va='center', fontsize=12, fontweight='bold')
 
         # Кнопки навигации
         btn_prev_ax = self.profession_selection_fig.add_subplot(gs[2, 0])
@@ -238,10 +241,10 @@ class PopulationSimulator:
         btn_ok_ax = self.profession_selection_fig.add_subplot(gs[3, 0])
         btn_skip_ax = self.profession_selection_fig.add_subplot(gs[3, 1])
 
-        self.btn_prev_prof = Button(btn_prev_ax, 'ПРЕДЫДУЩИЙ', color='lightyellow', hovercolor='orange')
-        self.btn_next_prof = Button(btn_next_ax, 'СЛЕДУЮЩИЙ', color='lightyellow', hovercolor='orange')
-        self.btn_ok_prof = Button(btn_ok_ax, 'НАЗНАЧИТЬ', color='lightgreen', hovercolor='green')
-        self.btn_skip_prof = Button(btn_skip_ax, 'ПРОПУСТИТЬ', color='salmon', hovercolor='red')
+        self.btn_prev_prof = Button(btn_prev_ax, '◀ ПРЕДЫДУЩИЙ', color='lightyellow', hovercolor='orange')
+        self.btn_next_prof = Button(btn_next_ax, 'СЛЕДУЮЩИЙ ▶', color='lightyellow', hovercolor='orange')
+        self.btn_ok_prof = Button(btn_ok_ax, '✅ НАЗНАЧИТЬ', color='lightgreen', hovercolor='green')
+        self.btn_skip_prof = Button(btn_skip_ax, '⏭ ПРОПУСТИТЬ', color='salmon', hovercolor='red')
 
         # Привязываем обработчики
         self.btn_prev_prof.on_clicked(self.prev_profession_candidate)
@@ -257,21 +260,53 @@ class PopulationSimulator:
 
     def prev_profession_candidate(self, event):
         """Предыдущий кандидат на должность"""
-        if not self.profession_candidates:
+        if not hasattr(self, 'profession_candidates') or not self.profession_candidates:
+            print("Нет кандидатов для переключения")
             return
 
         self.current_candidate_index = (self.current_candidate_index - 1) % len(self.profession_candidates)
         self.current_candidate_id = self.profession_candidates[self.current_candidate_index]
+
+        # Обновляем анкету
         self.show_unit_profile(self.current_candidate_id, self.profession_profile_ax)
+
+        # Обновляем информационное поле
+        if self.profession_selection_fig and len(self.profession_selection_fig.axes) > 2:
+            info_ax = self.profession_selection_fig.axes[2]
+            info_ax.clear()
+            info_ax.axis('off')
+            current_profession = self.vacant_professions[self.current_profession_index]
+            info_text = f'ВЫБОР КАНДИДАТА\n\nДолжность: {current_profession}\n\nВсего кандидатов: {len(self.profession_candidates)}\nТекущий: {self.current_candidate_index + 1} из {len(self.profession_candidates)}\n\nВыберите подходящего человека'
+            info_ax.text(0.5, 0.5, info_text, ha='center', va='center', fontsize=12, fontweight='bold')
+
+        self.profession_selection_fig.canvas.draw()
+        print(
+            f"Переключено на кандидата ID: {self.current_candidate_id} ({self.current_candidate_index + 1}/{len(self.profession_candidates)})")
 
     def next_profession_candidate(self, event):
         """Следующий кандидат на должность"""
-        if not self.profession_candidates:
+        if not hasattr(self, 'profession_candidates') or not self.profession_candidates:
+            print("Нет кандидатов для переключения")
             return
 
         self.current_candidate_index = (self.current_candidate_index + 1) % len(self.profession_candidates)
         self.current_candidate_id = self.profession_candidates[self.current_candidate_index]
+
+        # Обновляем анкету
         self.show_unit_profile(self.current_candidate_id, self.profession_profile_ax)
+
+        # Обновляем информационное поле
+        if self.profession_selection_fig and len(self.profession_selection_fig.axes) > 2:
+            info_ax = self.profession_selection_fig.axes[2]
+            info_ax.clear()
+            info_ax.axis('off')
+            current_profession = self.vacant_professions[self.current_profession_index]
+            info_text = f'ВЫБОР КАНДИДАТА\n\nДолжность: {current_profession}\n\nВсего кандидатов: {len(self.profession_candidates)}\nТекущий: {self.current_candidate_index + 1} из {len(self.profession_candidates)}\n\nВыберите подходящего человека'
+            info_ax.text(0.5, 0.5, info_text, ha='center', va='center', fontsize=12, fontweight='bold')
+
+        self.profession_selection_fig.canvas.draw()
+        print(
+            f"Переключено на кандидата ID: {self.current_candidate_id} ({self.current_candidate_index + 1}/{len(self.profession_candidates)})")
 
     def select_profession_candidate(self, event):
         """Назначение кандидата на должность"""
@@ -280,7 +315,7 @@ class PopulationSimulator:
         # Назначаем на должность
         if self.population.assign_profession(self.current_candidate_id, current_profession):
             print(
-                f"✅ {self.population.people_dict[self.current_candidate_id].name} назначен на должность {current_profession}")
+                f"✅ {self.population.people_dict[self.current_candidate_id].name} {self.population.people_dict[self.current_candidate_id].surname} (ID: {self.current_candidate_id}) назначен на должность {current_profession}")
 
             # Переходим к следующей вакансии
             self.current_profession_index += 1
@@ -288,6 +323,7 @@ class PopulationSimulator:
             # Закрываем текущее окно
             if self.profession_selection_fig:
                 plt.close(self.profession_selection_fig)
+                self.profession_selection_fig = None
 
             # Показываем следующую вакансию
             self.show_profession_selection_for_current()
@@ -300,6 +336,7 @@ class PopulationSimulator:
         # Закрываем текущее окно
         if self.profession_selection_fig:
             plt.close(self.profession_selection_fig)
+            self.profession_selection_fig = None
 
         # Показываем следующую вакансию
         self.show_profession_selection_for_current()
