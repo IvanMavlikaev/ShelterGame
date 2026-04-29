@@ -1,6 +1,6 @@
 from Person import Person
 import config
-
+import random
 
 class Population:
     def __init__(self, count):
@@ -126,6 +126,16 @@ def find_ancestor(population, person1, person2):
             else:
                 return -2
     return -1
+
+
+def divorsce(person1, person2):
+    if person1.robustness_marriage == 2 or person2.robustness_marriage == 2:
+        return False
+    elif person1.robustness_marriage == 1 or person2.robustness_marriage == 1:
+        probability = random.choices([0, 1], weights=[0.95, 0.05])[0]
+        return probability
+    probability = random.choices([0, 1], weights=[0.9, 0.1])[0]
+    return probability
 
 
 
