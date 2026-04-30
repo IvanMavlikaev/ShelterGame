@@ -137,5 +137,10 @@ def divorsce(person1, person2):
     probability = random.choices([0, 1], weights=[0.9, 0.1])[0]
     return probability
 
+def alcogolism_death(person1):
+    if person1.alcoholism_layer == 10:
+        return True
+    return False
+
 
 
