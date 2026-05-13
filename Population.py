@@ -128,11 +128,14 @@ def find_ancestor(population, person1, person2):
     return -1
 
 
-def divorsce(person1, person2):
+def divorce(person1, person2):
     if person1.robustness_marriage == 2 or person2.robustness_marriage == 2:
         return False
     elif person1.robustness_marriage == 1 or person2.robustness_marriage == 1:
-        probability = random.choices([0, 1], weights=[0.95, 0.05])[0]
+        if person1.agressive_layer == 0 and  person2.agressive_layer == 0:
+            probability = random.choices([0, 1], weights=[0.95, 0.05])[0]
+            return probability
+        probability = random.choices([0, 1], weights=[0.95 - max(person1.agressive_layer, person2.agressive_layer) * 0.05, 0.05 +  max(person1.agressive_layer, person2.agressive_layer) * 0.05])[0]
         return probability
     probability = random.choices([0, 1], weights=[0.9, 0.1])[0]
     return probability
